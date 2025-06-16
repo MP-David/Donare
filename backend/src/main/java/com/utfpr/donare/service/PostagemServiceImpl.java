@@ -3,12 +3,14 @@ package com.utfpr.donare.service;
 import com.utfpr.donare.dto.PostagemRequestDTO;
 import com.utfpr.donare.dto.PostagemResponseDTO;
 import com.utfpr.donare.exception.ResourceNotFoundException;
+import com.utfpr.donare.mapper.PostagemMapper;
 import com.utfpr.donare.domain.Campanha;
 import com.utfpr.donare.domain.Postagem;
 import com.utfpr.donare.repository.CampanhaRepository;
 import com.utfpr.donare.repository.PostagemRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -21,100 +23,102 @@ public class PostagemServiceImpl implements PostagemService {
 
     private final PostagemRepository postagemRepository;
     private final CampanhaRepository campanhaRepository;
+    private final PostagemMapper postagemMapper;
 
     @Override
-    public PostagemResponseDTO criarPostagem(Long idCampanha, PostagemRequestDTO postagemRequestDTO, String organizadorEmail) {
+    @Transactional
+    public PostagemResponseDTO criarPostagem(Long idCampanha, PostagemRequestDTO postagemRequestDTO, MultipartFile midia, String organizadorEmail) {
         Campanha campanha = campanhaRepository.findById(idCampanha)
                 .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o id: " + idCampanha));
-
-        Postagem postagem = new Postagem();
-        postagem.setTitulo(postagemRequestDTO.getTitulo());
-        postagem.setConteudo(postagemRequestDTO.getConteudo());
+        Postagem postagem = postagemMapper.requestDtoToEntity(postagemRequestDTO);
         postagem.setCampanha(campanha);
         postagem.setOrganizadorEmail(organizadorEmail);
 
-        if (postagemRequestDTO.getMidia() != null && !postagemRequestDTO.getMidia().isEmpty()) {
+        if (midia != null && !midia.isEmpty()) {
             try {
-                MultipartFile arquivo = postagemRequestDTO.getMidia();
-                postagem.setMidia(arquivo.getBytes());
+                byte[] midiaBytes = midia.getBytes();
+                String contentType = midia.getContentType();
+                postagem.setMidia(midiaBytes);
+                postagem.setMidiaContentType(contentType);
             } catch (IOException e) {
-                throw new RuntimeException("Erro ao processar arquivo de mídia", e);
+                throw new RuntimeException("Erro ao processar arquivo de mídia da postagem", e);
             }
         }
-
         Postagem postagemSalva = postagemRepository.save(postagem);
-        return converterParaResponseDTO(postagemSalva);
+        return postagemMapper.entityToResponseDto(postagemSalva);
     }
 
     @Override
+    @Transactional(readOnly = true)
     public List<PostagemResponseDTO> listarPostagensPorCampanha(Long idCampanha) {
         if (!campanhaRepository.existsById(idCampanha)) {
             throw new ResourceNotFoundException("Campanha não encontrada com o id: " + idCampanha);
         }
         List<Postagem> postagens = postagemRepository.findByCampanhaIdOrderByDataCriacaoDesc(idCampanha);
-        return postagens.stream().map(this::converterParaResponseDTO).collect(Collectors.toList());
+        return postagens.stream()
+                .map(postagemMapper::entityToResponseDto)
+                .collect(Collectors.toList());
     }
 
     @Override
-    public PostagemResponseDTO buscarPostagemPorId(Long idCampanha, Long idPostagem) {
+    @Transactional(readOnly = true)
+    public PostagemResponseDTO buscarPostagemPorId(Long idPostagem) {
+        Postagem postagem = postagemRepository.findById(idPostagem)
+                .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
+        return postagemMapper.entityToResponseDto(postagem);
+    }
+
+    @Override
+    @Transactional
+    public PostagemResponseDTO editarPostagem(Long idPostagem, PostagemRequestDTO postagemRequestDTO, MultipartFile midia, String organizadorEmail) {
         Postagem postagem = postagemRepository.findById(idPostagem)
                 .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
 
-        if (!postagem.getCampanha().getId().equals(idCampanha)) {
-            throw new ResourceNotFoundException("Postagem com id " + idPostagem + " não pertence à campanha com id " + idCampanha);
+        if (!postagem.getOrganizadorEmail().equals(organizadorEmail)) {
+            throw new RuntimeException("Apenas o organizador pode editar a postagem");
         }
-        return converterParaResponseDTO(postagem);
-    }
 
-    @Override
-    public PostagemResponseDTO editarPostagem(Long idPostagem, PostagemRequestDTO postagemRequestDTO, String organizadorEmail) {
-        Postagem postagem = postagemRepository.findById(idPostagem)
-                .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
+        postagemMapper.updateEntityFromRequestDto(postagemRequestDTO, postagem);
 
-        postagem.setTitulo(postagemRequestDTO.getTitulo());
-        postagem.setConteudo(postagemRequestDTO.getConteudo());
-
-        if (postagemRequestDTO.getMidia() != null && !postagemRequestDTO.getMidia().isEmpty()) {
+        if (midia != null && !midia.isEmpty()) {
             try {
-                MultipartFile arquivo = postagemRequestDTO.getMidia();
-                postagem.setMidia(arquivo.getBytes());
+                byte[] midiaBytes = midia.getBytes();
+                String contentType = midia.getContentType();
+                postagem.setMidia(midiaBytes);
+                postagem.setMidiaContentType(contentType);
             } catch (IOException e) {
-                throw new RuntimeException("Erro ao processar arquivo de mídia", e);
+                throw new RuntimeException("Erro ao processar novo arquivo de mídia da postagem", e);
             }
         }
 
         Postagem postagemAtualizada = postagemRepository.save(postagem);
-        return converterParaResponseDTO(postagemAtualizada);
+        return postagemMapper.entityToResponseDto(postagemAtualizada);
     }
 
     @Override
+    @Transactional
     public void deletarPostagem(Long idPostagem, String organizadorEmail) {
         Postagem postagem = postagemRepository.findById(idPostagem)
                 .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
+        if (!postagem.getOrganizadorEmail().equals(organizadorEmail)) {
+            throw new RuntimeException("Apenas o organizador pode deletar a postagem");
+        }
         postagemRepository.delete(postagem);
     }
 
-    private PostagemResponseDTO converterParaResponseDTO(Postagem postagem) {
-        Campanha campanha = postagem.getCampanha();
-        String organizadorCampanha = (campanha != null && campanha.getOrganizador() != null)
-                ? campanha.getOrganizador() : "Organizador não disponível";
+    @Override
+    @Transactional(readOnly = true)
+    public byte[] obterMidiaPostagem(Long idPostagem) {
+        Postagem postagem = postagemRepository.findById(idPostagem)
+                .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
+        return postagem.getMidia();
+    }
 
-        return new PostagemResponseDTO(
-                postagem.getId(),
-                postagem.getTitulo(),
-                postagem.getConteudo(),
-                postagem.getDataCriacao(),
-                postagem.getOrganizadorEmail(),
-                postagem.getMidia(),
-                campanha != null ? campanha.getId() : null,
-                campanha != null ? campanha.getTitulo() : "Campanha não associada",
-                campanha != null ? campanha.getCategoriaCampanha() : "N/A",
-                campanha != null ? campanha.getEndereco() : "N/A",
-                campanha != null ? campanha.getStatus() : "N/A",
-                campanha != null ? campanha.getTipoCertificado() : "N/A",
-                campanha != null ? campanha.getDt_inicio() : null,
-                campanha != null ? campanha.getDt_fim() : null,
-                organizadorCampanha
-        );
+    @Override
+    @Transactional(readOnly = true)
+    public String obterMidiaContentType(Long idPostagem) {
+        Postagem postagem = postagemRepository.findById(idPostagem)
+                .orElseThrow(() -> new ResourceNotFoundException("Postagem não encontrada com o id: " + idPostagem));
+        return postagem.getMidiaContentType();
     }
 }

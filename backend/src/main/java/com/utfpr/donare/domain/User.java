@@ -2,12 +2,16 @@ package com.utfpr.donare.domain;
 
 import jakarta.persistence.*;
 import lombok.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "users")
@@ -21,6 +25,9 @@ public class User implements UserDetails {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    private Endereco idEndereco;
+
     private String nome;
 
     @Column(unique = true, nullable = false)
@@ -29,14 +36,29 @@ public class User implements UserDetails {
     @Column(unique = true, nullable = false)
     private String cpfOuCnpj;
 
-    // guarda a imagem em Base64
     private String fotoPerfil;
 
     private String password;
 
+    @Enumerated(EnumType.ORDINAL)
+    private TipoUsuario tipoUsuario;
+
+    @Lob
+    @Basic(fetch = FetchType.LAZY)
+    @Column(name = "midia")
+    @JdbcTypeCode(SqlTypes.LONGVARBINARY)
+    private byte[] midia;
+
+    @Column(name = "midiaContentType")
+    private String midiaContentType;
+
     private boolean ativo;
 
-    //todo verificar se vamos trabalhar com roles
+    @ManyToMany(mappedBy = "voluntarios", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Set<Campanha> campanhasVoluntariadas = new HashSet<>();
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority("ROLE_USER"), new SimpleGrantedAuthority("ROLE_ADMIN"));

@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "comentario")
+@Table(name = "comentarios")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
@@ -36,14 +36,13 @@ public class Comentario {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    @Column(nullable = false)
-    private String userEmail;
 
-    @Column(nullable = true)
-    private Long idComentarioPai;
-//
-//    @OneToMany(mappedBy = "comentario", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-//    public List<Comentario> respostas = new ArrayList<>();
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_comentario_pai")
+    private Comentario comentarioPai;
 
+
+    @OneToMany(mappedBy = "comentarioPai", cascade = CascadeType.ALL, orphanRemoval = true)
+    private List<Comentario> respostas = new ArrayList<>();
 
 }
