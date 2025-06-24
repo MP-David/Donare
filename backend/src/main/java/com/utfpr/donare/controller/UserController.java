@@ -1,9 +1,6 @@
 package com.utfpr.donare.controller;
 
-import com.utfpr.donare.dto.AuthRequestDTO;
-import com.utfpr.donare.dto.ErrorResponse;
-import com.utfpr.donare.dto.UserRequestDTO;
-import com.utfpr.donare.dto.UserResponseDTO;
+import com.utfpr.donare.dto.*;
 import com.utfpr.donare.service.UserService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,6 +17,13 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+
+//cors
+   import org.springframework.context.annotation.Bean;
+   import org.springframework.web.servlet.config.annotation.CorsRegistry;
+   import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+
+
 
 @RequiredArgsConstructor
 @RequestMapping(path = "usuarios")
@@ -142,5 +146,13 @@ public class UserController {
             @PathVariable Long id) {
 
         return new ResponseEntity<>(userService.findById(id), HttpStatus.OK);
+    }
+
+    @GetMapping(path = "email/{email}")
+    public ResponseEntity<UserResponseDTO> findByEmail(
+            @Parameter(description = "E-mail do usuário a ser encontra.", required = true, example = "david@mail.com")
+            @PathVariable String email) {
+
+        return new ResponseEntity<>(userService.findUserResponseDtoByEmail(email), HttpStatus.OK);
     }
 }

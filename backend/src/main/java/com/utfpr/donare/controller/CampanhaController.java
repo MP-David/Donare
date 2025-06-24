@@ -4,7 +4,9 @@ import com.utfpr.donare.dto.CampanhaRequestDTO;
 import com.utfpr.donare.dto.CampanhaResponseDTO;
 import com.utfpr.donare.dto.VoluntarioResponseDTO;
 import com.utfpr.donare.service.CampanhaService;
+import com.utfpr.donare.service.QRCodeService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -14,12 +16,15 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
+
+
 @RestController
 @RequestMapping("/campanhas")
 @RequiredArgsConstructor
 public class CampanhaController {
 
     private final CampanhaService campanhaService;
+    private final QRCodeService qrCodeService;
 
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<CampanhaResponseDTO> save(
@@ -35,14 +40,14 @@ public class CampanhaController {
     public ResponseEntity<List<CampanhaResponseDTO>> findAll(
             @RequestParam(required = false) String tipo,
             @RequestParam(required = false) String localidade,
+            @RequestParam(required = false) String usuario,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "dtInicio") String sort) {
 
-        List<CampanhaResponseDTO> campanhas = campanhaService.listarCampanhas(tipo, localidade, page, size, sort);
+        List<CampanhaResponseDTO> campanhas = campanhaService.listarCampanhas(tipo, localidade, usuario, page, size, sort);
         return ResponseEntity.ok(campanhas);
     }
-
     @GetMapping("/{id}")
     public ResponseEntity<CampanhaResponseDTO> findById(@PathVariable Long id) {
         CampanhaResponseDTO campanha = campanhaService.buscarCampanhaPorId(id);
@@ -88,7 +93,24 @@ public class CampanhaController {
         return ResponseEntity.ok(voluntarios);
     }
 
+    @GetMapping("/{id}/qrcode")
+    public ResponseEntity<byte[]> getQRCode(@PathVariable Long id) {
+        CampanhaResponseDTO campanha = campanhaService.buscarCampanhaPorId(id);
+
+        String data = "https://donare.com/campanha/" + id;
+        byte[] qrCodeImage;
+        try {
+            qrCodeImage = qrCodeService.gerarQRCode(data, 300, 300);
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.IMAGE_PNG);
+        return new ResponseEntity<>(qrCodeImage, headers, HttpStatus.OK);
+    }
+
     private String obterMockOrganizadorEmail() {
-        return "organizador@exemplo.com";
+        return ".com";
     }
 }
