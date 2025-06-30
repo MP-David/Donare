@@ -1,16 +1,15 @@
 package com.utfpr.donare.service;
 
 import com.utfpr.donare.config.jwt.JwtTokenUtil;
-import com.utfpr.donare.domain.Endereco;
-import com.utfpr.donare.domain.TipoUsuario;
-import com.utfpr.donare.domain.User;
-import com.utfpr.donare.dto.UserRequestDTO;
-import com.utfpr.donare.dto.UserResponseDTO;
+import com.utfpr.donare.domain.*;
+import com.utfpr.donare.dto.*;
 import com.utfpr.donare.exception.BadRequestException;
 import com.utfpr.donare.exception.ResourceNotFoundException;
 import com.utfpr.donare.exception.UnauthorizedException;
+import com.utfpr.donare.mapper.CampanhaMapper;
 import com.utfpr.donare.mapper.EnderecoMapper;
 import com.utfpr.donare.mapper.UserMapper;
+import com.utfpr.donare.repository.CampanhaRepository;
 import com.utfpr.donare.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -22,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -34,17 +35,18 @@ public class UserService implements UserDetailsService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenUtil jwtTokenUtil;
     private final EnderecoMapper enderecoMapper;
+    private final CampanhaRepository campanhaRepository;
+    private final CampanhaMapper campanhaMapper;
+    private final EmailService emailService;
 
     @Transactional
     public  UserResponseDTO save(UserRequestDTO dto, MultipartFile midia) {
 
         if (userRepository.findByEmail(dto.getEmail()).isPresent()) {
-
             throw new BadRequestException("O e-mail '" + dto.getEmail() + "' já está em uso.");
         }
 
         if (userRepository.findByCpfOuCnpj(dto.getCpfOuCnpj()).isPresent()) {
-
             throw new BadRequestException("O CPF/CNPJ '" + dto.getCpfOuCnpj() + "' já está cadastrado.");
         }
 
@@ -57,7 +59,7 @@ public class UserService implements UserDetailsService {
                 .password(passwordEncoder.encode(dto.getPassword()))
                 .idEndereco(endereco)
                 .ativo(true)
-                .tipoUsuario(dto.getTipoUsuario() == 0 ? TipoUsuario.PESSOA_FISICA : TipoUsuario.PESSOA_JURIDICA)
+                .tipoUsuario(TipoUsuario.valueOfCodigo(dto.getTipoUsuario()))
                 .build();
 
         endereco.setUser(user);
@@ -65,6 +67,11 @@ public class UserService implements UserDetailsService {
         setUserMidia(midia, user);
 
         userRepository.save(user);
+
+        Map<String, String> variables = new HashMap<>();
+        variables.put("name", user.getNome());
+        EmailRequestDTO request = new EmailRequestDTO(user.getEmail(), user.getNome(), variables, EmailType.CADASTROCONTA);
+        emailService.sendEmail(request);
 
         return userMapper.toUserResponseDTO(user);
     }
@@ -109,7 +116,7 @@ public class UserService implements UserDetailsService {
         user.setNome(dto.getNome());
         user.setEmail(dto.getEmail());
         user.setCpfOuCnpj(dto.getCpfOuCnpj());
-        user.setTipoUsuario(dto.getTipoUsuario() == 0 ? TipoUsuario.PESSOA_FISICA : TipoUsuario.PESSOA_JURIDICA);
+        user.setTipoUsuario(dto.getTipoUsuario() == 1 ? TipoUsuario.PESSOA_FISICA : TipoUsuario.PESSOA_JURIDICA);
 
         Endereco endereco = user.getIdEndereco();
 
@@ -129,6 +136,29 @@ public class UserService implements UserDetailsService {
 
         if (dto.getPassword() != null && !dto.getPassword().isBlank()) {
             user.setPassword(passwordEncoder.encode(dto.getPassword()));
+        }
+
+        User updatedUser = userRepository.save(user);
+
+        return userMapper.toUserResponseDTO(updatedUser);
+    }
+
+    @Transactional
+    public UserResponseDTO updatePassword(Long id, UserPasswordRequestDTO dto) {
+
+        User user = userRepository.findById(id).orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com o ID: " + id));
+
+        System.out.println(user.getPassword());
+        System.out.println(dto.getOldPassword());
+
+        if (dto.getOldPassword() != null && !dto.getOldPassword().isBlank() && dto.getNewPassword() != null && !dto.getNewPassword().isBlank()) {
+
+            if (passwordEncoder.matches(dto.getOldPassword(), user.getPassword())) {
+                user.setPassword(passwordEncoder.encode(dto.getNewPassword()));
+            }
+            else {
+                throw new ResourceNotFoundException("senha antiga informada não encontrada");
+            }
         }
 
         User updatedUser = userRepository.save(user);
@@ -158,6 +188,11 @@ public class UserService implements UserDetailsService {
         return userRepository.findById(id)
                 .map(userMapper::toUserResponseDTO)
                 .orElseThrow(() -> new ResourceNotFoundException("Id de usuário não encontrado. ID de busca: " + id));
+    }
+
+    private User findUserById(Long id) {
+        return userRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuário não encontrado com o ID: " + id));
     }
 
     public String autenticar(String email, String senha) {
@@ -191,14 +226,46 @@ public class UserService implements UserDetailsService {
                 .collect(Collectors.toList());
     }
 
-    public String compartilharCampanha(Long idCampanha) {
+    @Transactional
+    public void seguirCampanha(Long idUsuario, Long idCampanha) {
 
-        return "https://donare.com/campanha/" + idCampanha;
+        User user = findUserById(idUsuario);
+
+        Campanha campanha = campanhaRepository.findById(idCampanha)
+                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + idCampanha));
+
+        if (user.getCampanhasSeguidas().contains(campanha)) {
+            throw new BadRequestException("Usuário já segue esta campanha.");
+        }
+
+        user.getCampanhasSeguidas().add(campanha);
+        userRepository.save(user);
     }
 
-    public void voluntariarSe(Long idCampanha) {
+    @Transactional
+    public void pararDeSeguirCampanha(Long idUsuario, Long idCampanha) {
 
-        System.out.println("Usuário voluntariado na campanha ID: " + idCampanha);
+        User user = findUserById(idUsuario);
+
+        Campanha campanha = campanhaRepository.findById(idCampanha)
+                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + idCampanha));
+
+        if (!user.getCampanhasSeguidas().contains(campanha)) {
+            throw new BadRequestException("Usuário não segue esta campanha.");
+        }
+
+        user.getCampanhasSeguidas().remove(campanha);
+        userRepository.save(user);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CampanhaResponseDTO> findCampanhasSeguidasByUsuario(Long idUsuario) {
+
+        User user = findUserById(idUsuario);
+
+        return user.getCampanhasSeguidas().stream()
+                .map(campanhaMapper::entityToResponseDto)
+                .collect(Collectors.toList());
     }
 
     @Override

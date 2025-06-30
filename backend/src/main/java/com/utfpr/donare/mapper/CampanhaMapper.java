@@ -12,7 +12,6 @@ import org.mapstruct.BeanMapping;
 @Mapper(componentModel = "spring", uses = {PostagemMapper.class})
 public interface CampanhaMapper {
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "dtInicio", ignore = true)
     @Mapping(target = "organizador", ignore = true)
     @Mapping(target = "postagens", ignore = true)
     @Mapping(target = "voluntarios", ignore = true)
@@ -20,11 +19,12 @@ public interface CampanhaMapper {
     Campanha requestDtoToEntity(CampanhaRequestDTO dto);
 
     @Mapping(target = "imagemCapa", ignore = true)
+    @Mapping(target = "voluntarios", ignore = true)
+    @Mapping(target = "usuariosQueSeguem", ignore = true)
     CampanhaResponseDTO entityToResponseDto(Campanha campanha);
 
     @BeanMapping(nullValuePropertyMappingStrategy = NullValuePropertyMappingStrategy.IGNORE)
     @Mapping(target = "id", ignore = true)
-    @Mapping(target = "dtInicio", ignore = true)
     @Mapping(target = "organizador", ignore = true)
     @Mapping(target = "postagens", ignore = true)
     @Mapping(target = "voluntarios", ignore = true)

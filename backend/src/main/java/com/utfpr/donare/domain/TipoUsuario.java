@@ -5,7 +5,7 @@ import lombok.Getter;
 @Getter
 public enum TipoUsuario {
 
-    PESSOA_FISICA(0), PESSOA_JURIDICA(1);
+    PESSOA_FISICA(1), PESSOA_JURIDICA(2);
 
     final int codigo;
 
@@ -13,4 +13,12 @@ public enum TipoUsuario {
         this.codigo = codigo;
     }
 
+    public static TipoUsuario valueOfCodigo(int codigo) {
+        for (TipoUsuario tipo : TipoUsuario.values()) {
+            if (tipo.getCodigo() == codigo) {
+                return tipo;
+            }
+        }
+        throw new IllegalArgumentException("Código de TipoUsuario inválido: " + codigo);
+    }
 }

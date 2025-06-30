@@ -1,5 +1,7 @@
 package com.utfpr.donare.domain;
 
+import com.utfpr.donare.domain.enums.CategoriaEnum;
+import com.utfpr.donare.domain.enums.TipoCertificadoEnum;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
@@ -7,13 +9,16 @@ import org.hibernate.type.SqlTypes;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Entity
 @Table(name = "campanha")
 @Data
 @NoArgsConstructor
 @AllArgsConstructor
+@ToString(onlyExplicitlyIncluded = true)
 public class Campanha {
 
     @Id
@@ -27,7 +32,9 @@ public class Campanha {
 
     private String categoriaCampanha;
 
-    private String endereco;
+    @OneToOne(mappedBy = "campanha", cascade = CascadeType.ALL, orphanRemoval = true)
+    @EqualsAndHashCode.Exclude
+    private Endereco endereco;
 
     @Lob
     @Basic(fetch = FetchType.LAZY)
@@ -42,13 +49,14 @@ public class Campanha {
 
     private String tipoCertificado;
 
-    private LocalDateTime dtInicio = LocalDateTime.now();
+    private LocalDateTime dtInicio;
 
     private LocalDateTime dt_fim;
 
     @Column(nullable = false)
     private String organizador;
 
+    //TODO VALIDAR SE ISSO SERÁ USADO
     @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE})
     @JoinTable(
             name = "campanha_voluntarios",
@@ -64,4 +72,10 @@ public class Campanha {
     @EqualsAndHashCode.Exclude
     private List<Postagem> postagens = new ArrayList<>();
 
+    @ManyToMany(mappedBy = "campanhasSeguidas", fetch = FetchType.LAZY)
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Set<User> usuariosQueSeguem = new HashSet<>();
+
+    private boolean ativo = true;
 }

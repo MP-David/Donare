@@ -1,193 +1,260 @@
-document.addEventListener('DOMContentLoaded', () => {
-  function abrirModalInstitution() {
-    document.getElementById('modalInstitution').classList.add('show');
-    document.body.classList.add('modal-ativa');
-  }
-  function fecharModalInstitution() {
-    document.getElementById('modalInstitution').classList.remove('show');
-    document.body.classList.remove('modal-ativa');
-  }
-  window.abrirModalInstitution = abrirModalInstitution;
-  window.fecharModalInstitution = fecharModalInstitution;
-  window.addEventListener('click', (e) => {
-    if (e.target === document.getElementById('modalInstitution')) {
-      fecharModalInstitution();
-    }
-  });
-  window.previewImage = (event) => {
-    const [file] = event.target.files;
-    if (!file) return;
-    const preview = document.getElementById('preview');
-    preview.src = URL.createObjectURL(file);
-    preview.alt = "Imagem selecionada";
-  };
-  const customMulti = document.getElementById('custom-multiselect');
-  const selectedTagsContainer = customMulti.querySelector('.selected-tags');
-  const optionsList = customMulti.querySelector('.options-list');
-  const hiddenSelect = document.getElementById('tipos');
-  customMulti.addEventListener('click', (e) => {
-    const tgt = e.target;
-    if (tgt.tagName.toLowerCase() === 'input' && tgt.type === 'checkbox') return;
-    if (tgt.classList.contains('tag-close')) return;
-    optionsList.classList.toggle('show');
-  });
-  document.addEventListener('click', (e) => {
-    if (!customMulti.contains(e.target)) {
-      optionsList.classList.remove('show');
-    }
-  });
-  optionsList.addEventListener('change', (e) => {
-    const tgt = e.target;
-    if (tgt.tagName.toLowerCase() === 'input' && tgt.type === 'checkbox') {
-      atualizarTagsSelecionadas();
-    }
-  });
-  selectedTagsContainer.addEventListener('click', (e) => {
-    const tgt = e.target;
-    if (tgt.classList.contains('tag-close')) {
-      const valor = tgt.parentElement.getAttribute('data-value');
-      const checkboxParaDesmarcar = optionsList.querySelector(`input[type="checkbox"][value="${valor}"]`);
-      if (checkboxParaDesmarcar) checkboxParaDesmarcar.checked = false;
-      atualizarTagsSelecionadas();
-    }
-  });
-  function atualizarTagsSelecionadas() {
-    selectedTagsContainer.innerHTML = '';
-    hiddenSelect.innerHTML = '';
-    const checkboxes = optionsList.querySelectorAll("input[type='checkbox']");
-    checkboxes.forEach((cb) => {
-      if (cb.checked) {
-        const tag = document.createElement('span');
-        tag.classList.add('tag');
-        tag.setAttribute('data-value', cb.value);
-        tag.appendChild(document.createTextNode(cb.value));
-        const closeIcon = document.createElement('i');
-        closeIcon.classList.add('fa-solid', 'fa-xmark', 'tag-close');
-        tag.appendChild(closeIcon);
-        selectedTagsContainer.appendChild(tag);
-        const opt = document.createElement('option');
-        opt.value = cb.value;
-        opt.selected = true;
-        hiddenSelect.appendChild(opt);
-      }
-    });
-  }
-  atualizarTagsSelecionadas();
-  const btnOpenTimepicker = document.getElementById('btn-open-timepicker');
-  const timepickerPopup = document.getElementById('timepicker-popup');
-  const inputHorario = document.getElementById('horario');
-  const timeStart = document.getElementById('time-start');
-  const timeEnd = document.getElementById('time-end');
-  const btnApplyTime = document.getElementById('btn-apply-time');
-  if (btnOpenTimepicker && timepickerPopup) {
-    btnOpenTimepicker.addEventListener('click', (e) => {
-      e.stopPropagation();
-      timepickerPopup.classList.toggle('show');
-    });
-    btnApplyTime.addEventListener('click', () => {
-      const startVal = timeStart.value;
-      const endVal = timeEnd.value;
-      if (startVal && endVal) {
-        inputHorario.value = `${startVal} – ${endVal}`;
-      }
-      timepickerPopup.classList.remove('show');
-    });
-    document.addEventListener('click', (e) => {
-      const clicouNoPopup = timepickerPopup.contains(e.target);
-      const clicouNoBotao = e.target === btnOpenTimepicker;
-      if (!clicouNoPopup && !clicouNoBotao) {
-        timepickerPopup.classList.remove('show');
-      }
-    });
-    const inicial = inputHorario.value.split(' – ');
-    if (inicial.length === 2) {
-      timeStart.value = inicial[0].trim();
-      timeEnd.value = inicial[1].trim();
-    }
-  }
-});
+// AdmPerfilInstituicao.js
+
+const API_BASE = 'http://localhost:8080';
+const token    = localStorage.getItem('token') || '';
+const usuario  = JSON.parse(localStorage.getItem('usuario') || '{}');
+const userId   = usuario.id;
+
+if (!token || !userId) {
+  alert('Usuário não autenticado.');
+  window.location.href = 'login.html';
+  throw new Error('Não autenticado');
+}
+
+function authHeaders(json = true) {
+  const headers = { Authorization: `Bearer ${token}` };
+  if (json) headers['Content-Type'] = 'application/json';
+  return headers;
+}
 
 document.addEventListener('DOMContentLoaded', () => {
-  const institutionId = 1;
-  fetchInstitutionDetails(institutionId);
-  fetchInstitutionCampaigns(institutionId);
+  fetchInstitutionDetails(userId);
+  fetchInstitutionCampaigns(userId);
+
+  document.getElementById('btnEditInstitution').addEventListener('click', abrirModalInstitution);
+  document.getElementById('institutionEditForm').addEventListener('submit', e => {
+    e.preventDefault();
+    abrirModalSenha();
+  });
+  document.getElementById('senhaConfirmForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    await confirmUpdate();
+  });
+
+  // handlers do novo modal de alterar senha
+  document.getElementById('btnChangePassword').addEventListener('click', abrirModalChangePassword);
+  document.getElementById('closeChangePasswordModal').addEventListener('click', fecharModalChangePassword);
+  document.getElementById('changePasswordForm').addEventListener('submit', async e => {
+    e.preventDefault();
+    await updatePassword();
+  });
 });
 
 async function fetchInstitutionDetails(id) {
   try {
-    const data = {
-      nome: "Instituição Muito Legal",
+    const res = await fetch(`${API_BASE}/usuarios/${id}`, { headers: authHeaders(false) });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
 
-      horarioFuncionamento: "Seg-Sex: 09:00 - 18:00 / Sab: 09:00 - 12:00",
-      doacoesAceitas: "Ração para cães e gatos, cobertores, medicamentos veterinários, brinquedos.",
-      descricao: "Somos um abrigo dedicado ao resgate, cuidado e adoção de animais em situação de vulnerabilidade. Nossa missão é oferecer uma segunda chance para cães e gatos, promovendo o bem-estar animal e a conscientização sobre a posse responsável."
-    };
-    document.getElementById('institutionName').textContent = data.nome;
-    document.getElementById('institutionType').textContent = data.tipo;
-    if (data.imagemUrl) {
-      document.getElementById('institutionImage').src = data.imagemUrl;
-      document.getElementById('institutionImage').alt = `Imagem de ${data.nome}`;
+    document.getElementById('institutionName').textContent = data.nome || '';
+    if (data.midia) {
+      const src = `data:${data.midiaContentType};base64,${data.midia}`;
+      document.getElementById('institutionImage').src = src;
+      document.getElementById('preview').src          = src;
     }
-    document.getElementById('institutionLocation').textContent = data.localizacao;
-    document.getElementById('institutionHours').textContent = data.horarioFuncionamento;
-    document.getElementById('institutionAcceptedDonations').textContent = data.doacoesAceitas;
-    document.getElementById('institutionDescriptionText').textContent = data.descricao;
-  } catch (error) {
-    console.error(error);
-    document.getElementById('institutionName').textContent = "Erro ao carregar dados da instituição.";
+
+    const end = data.idEndereco || {};
+    document.getElementById('institutionLocation').textContent =
+      [end.logradouro, end.bairro, end.cidade].filter(Boolean).join(', ');
+
+    document.getElementById('enderecoId').value  = end.id || '';
+    document.getElementById('nome').value        = data.nome || '';
+    document.getElementById('email').value       = data.email || '';
+    document.getElementById('cpfOuCnpj').value   = data.cpfOuCnpj || '';
+    document.getElementById('rua').value         = end.logradouro || '';
+    document.getElementById('numero').value      = end.numero || '';
+    document.getElementById('complemento').value = end.complemento || '';
+    document.getElementById('bairro').value      = end.bairro || '';
+    document.getElementById('cidade').value      = end.cidade || '';
+    document.getElementById('estado').value      = end.estado || '';
+    document.getElementById('cep').value         = end.cep || '';
+
+  } catch (err) {
+    console.error('Erro fetchInstitutionDetails:', err);
+    alert('Não foi possível carregar os detalhes da instituição. Veja o console.');
   }
 }
 
-async function fetchInstitutionCampaigns(institutionId) {
+async function fetchInstitutionCampaigns(idUsuario) {
+  const container = document.getElementById('campaignsList');
+  container.innerHTML = '<p class="loading">Carregando campanhas...</p>';
+
   try {
-    const campaigns = [
-      {
-        id: 1,
-        titulo: "Mi de comida!",
-        descricaoBreve: "Ajude-nos a alimentar nossos peludos este mês.",
-        imagemUrl: "https://images.unsplash.com/photo-1506744038136-46273834b3fb?auto=format&fit=crop&w=400&q=80",
-        seguindo: false
-      },
-      {
-        id: 2,
-        titulo: "Cobertores Quentinhos",
-        descricaoBreve: "O inverno está chegando! Doe cobertores.",
-        imagemUrl: "https://images.unsplash.com/photo-1517331156700-3c241d2b4d83?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=300&q=80",
-        seguindo: true
-      },
-      {
-        id: 3,
-        titulo: "Vacinação Solidária",
-        descricaoBreve: "Contribua para a campanha de vacinação anual.",
-        imagemUrl: "https://images.unsplash.com/photo-1583337130417-3346a1be7dee?ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D&auto=format&fit=crop&w=300&q=80",
-        seguindo: false
-      }
-    ];
-    const campaignsListDiv = document.getElementById('campaignsList');
-    campaignsListDiv.innerHTML = '';
-    if (campaigns.length === 0) {
-      campaignsListDiv.innerHTML = '<p>Nenhuma campanha ativa no momento.</p>';
+    const userRes = await fetch(`${API_BASE}/usuarios/${idUsuario}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    if (!userRes.ok) throw new Error('Erro ao buscar dados da instituição.');
+    const { email: userEmail } = await userRes.json();
+
+    const campsRes = await fetch(
+      `${API_BASE}/campanhas?usuario=${encodeURIComponent(userEmail)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!campsRes.ok) throw new Error('Erro ao buscar campanhas.');
+    const campaigns = await campsRes.json();
+
+    container.innerHTML = '';
+    if (!Array.isArray(campaigns) || campaigns.length === 0) {
+      container.innerHTML = '<p>Nenhuma campanha registrada.</p>';
       return;
     }
-    campaigns.forEach(campaign => {
+
+    campaigns.forEach(async campaign => {
+      let imgSrc = 'https://via.placeholder.com/300x200?text=Campanha';
+      try {
+        const imgResp = await fetch(
+          `${API_BASE}/campanhas/${campaign.id}/imagem`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        if (imgResp.ok) {
+          const blob = await imgResp.blob();
+          imgSrc = URL.createObjectURL(blob);
+        }
+      } catch {
+        // mantém placeholder
+      }
+
       const card = document.createElement('div');
       card.className = 'campaign-card';
       card.innerHTML = `
-                <div class="campaign-card-image-container">
-                    <img src="${campaign.imagemUrl || 'https://via.placeholder.com/300x200?text=Campanha'}" alt="${campaign.titulo}">
-                    <span class="campaign-card-title-on-image">${campaign.titulo}</span>
-                </div>
-                <div class="campaign-card-body">
-                    <p class="campaign-card-description">${campaign.descricaoBreve}</p>
-                    <div class="campaign-card-actions">
-                        <button class="btn-follow-campaign" data-campaign-id="${campaign.id}">editar</button>
-                    </div>
-                </div>
-            `;
-      campaignsListDiv.appendChild(card);
+        <div class="campaign-card-image-container">
+          <img src="${imgSrc}" alt="${campaign.titulo}">
+          <span class="campaign-card-title-on-image">${campaign.titulo}</span>
+        </div>
+        <div class="campaign-card-body">
+          <p class="campaign-card-description">${campaign.descricao || ''}</p>
+          <button class="btn-follow-campaign btn-edit-campaign">Editar</button>
+        </div>
+      `;
+      card.style.cursor = 'pointer';
+
+      // clique em qualquer lugar do card leva a ComentariosDetalhes.html
+      card.addEventListener('click', () => {
+        window.location.href = `ComentariosDetalhes.html?id=${campaign.id}`;
+      });
+
+      // botão de editar interrompe propagaçao e leva a CampanhaAdm
+      card.querySelector('.btn-edit-campaign').addEventListener('click', e => {
+        e.stopPropagation();
+        window.location.href = `CampanhaAdm.html?id=${campaign.id}`;
+      });
+
+      container.appendChild(card);
     });
-  } catch (error) {
-    console.error(error);
-    document.getElementById('campaignsList').innerHTML = '<p>Erro ao carregar campanhas.</p>';
+
+  } catch (err) {
+    console.error('Failed to fetch campaigns:', err);
+    container.innerHTML = '<p>Erro ao carregar campanhas.</p>';
+  }
+}
+
+function abrirModalInstitution() {
+  document.getElementById('modalInstitution').classList.add('show');
+  document.body.classList.add('modal-ativa');
+}
+function fecharModalInstitution() {
+  document.getElementById('modalInstitution').classList.remove('show');
+  document.body.classList.remove('modal-ativa');
+}
+function abrirModalSenha() {
+  fecharModalInstitution();
+  document.getElementById('modalSenhaConfirm').classList.add('show');
+  document.body.classList.add('modal-ativa');
+}
+function fecharModalSenha() {
+  document.getElementById('modalSenhaConfirm').classList.remove('show');
+  document.body.classList.remove('modal-ativa');
+}
+
+window.previewImage = e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('preview').src = URL.createObjectURL(file);
+};
+
+async function confirmUpdate() {
+  try {
+    const senha = document.getElementById('senhaAtualConfirm').value;
+    const dto = {
+      nome:        document.getElementById('nome').value,
+      email:       document.getElementById('email').value,
+      cpfOuCnpj:   document.getElementById('cpfOuCnpj').value,
+      tipoUsuario: usuario.tipoUsuario,
+      endereco: {
+        id:          +document.getElementById('enderecoId').value,
+        logradouro:  document.getElementById('rua').value,
+        complemento: document.getElementById('complemento').value,
+        bairro:      document.getElementById('bairro').value,
+        numero:      document.getElementById('numero').value,
+        cidade:      document.getElementById('cidade').value,
+        estado:      document.getElementById('estado').value,
+        cep:         document.getElementById('cep').value
+      },
+      password: senha
+    };
+
+    const form = new FormData();
+    form.append('user', new Blob([JSON.stringify(dto)], { type: 'application/json' }));
+    const img = document.getElementById('imagem').files[0];
+    if (img) form.append('midia', img);
+
+    const res = await fetch(`${API_BASE}/usuarios/${userId}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${token}` },
+      body: form
+    });
+
+    if (!res.ok) {
+      alert(`Erro ${res.status} ao atualizar.`);
+      fecharModalSenha();
+      abrirModalInstitution();
+      return;
+    }
+
+    alert('Dados atualizados com sucesso!');
+    fecharModalSenha();
+    window.location.reload();
+  } catch (err) {
+    console.error('Erro confirmUpdate:', err);
+    alert('Erro ao confirmar atualização. Veja o console.');
+  }
+}
+
+// === Novo modal de alterar senha ===
+
+function abrirModalChangePassword() {
+  document.getElementById('modalChangePassword').classList.add('show');
+  document.body.classList.add('modal-ativa');
+}
+function fecharModalChangePassword() {
+  document.getElementById('modalChangePassword').classList.remove('show');
+  document.body.classList.remove('modal-ativa');
+}
+async function updatePassword() {
+  const oldPassword = document.getElementById('inputOldPassword').value;
+  const newPassword = document.getElementById('inputNewPassword').value;
+  if (!oldPassword || !newPassword) {
+    alert('Preencha as duas senhas.');
+    return;
+  }
+  try {
+    const res = await fetch(
+      `${API_BASE}/usuarios/alterarSenha/${userId}`,
+      {
+        method: 'PUT',
+        headers: authHeaders(true),
+        body: JSON.stringify({ oldPassword, newPassword })
+      }
+    );
+    if (!res.ok) {
+      const errText = await res.text().catch(() => res.statusText);
+      alert(`Erro ${res.status}: ${errText}`);
+    } else {
+      alert('Senha alterada com sucesso!');
+      fecharModalChangePassword();
+    }
+  } catch (err) {
+    console.error('Erro updatePassword:', err);
+    alert('Falha na troca de senha. Veja o console.');
   }
 }

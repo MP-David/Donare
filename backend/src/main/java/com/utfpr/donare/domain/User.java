@@ -19,6 +19,7 @@ import java.util.Set;
 @NoArgsConstructor
 @AllArgsConstructor
 @Builder
+@ToString(onlyExplicitlyIncluded = true)
 public class User implements UserDetails {
 
     @Id
@@ -26,6 +27,7 @@ public class User implements UserDetails {
     private Long id;
 
     @OneToOne(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
+    @EqualsAndHashCode.Exclude
     private Endereco idEndereco;
 
     private String nome;
@@ -58,6 +60,18 @@ public class User implements UserDetails {
     @ToString.Exclude
     @EqualsAndHashCode.Exclude
     private Set<Campanha> campanhasVoluntariadas = new HashSet<>();
+
+
+    @ManyToMany(cascade = {CascadeType.PERSIST, CascadeType.MERGE}, fetch = FetchType.LAZY)
+    @JoinTable(
+            name = "user_campanha_seguida",
+            joinColumns = @JoinColumn(name = "user_id"),
+            inverseJoinColumns = @JoinColumn(name = "campanha_id")
+    )
+
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
+    private Set<Campanha> campanhasSeguidas = new HashSet<>();
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

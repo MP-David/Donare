@@ -19,11 +19,13 @@ public class CampanhaRequestDTO {
 
     private String categoriaCampanha;
 
-    private String endereco;
+    private EnderecoRequestDto endereco;
 
     private String status;
 
     private String tipoCertificado;
+
+    private LocalDateTime dtInicio;
 
     private LocalDateTime dt_fim;
 }

@@ -1,12 +1,242 @@
+const API_CONFIG = {
+    baseURL: 'http://localhost:8080'
+};
+
+function verificarAutenticacao() {
+    const token = localStorage.getItem('token');
+    
+    if (!token) {
+        alert('Você precisa fazer login para acessar esta página.');
+        window.location.href = '../pages/login.html';
+        return false;
+    }
+    
+    if (token.trim() === '' || token === 'null' || token === 'undefined') {
+        alert('Sessão expirada. Faça login novamente.');
+        localStorage.removeItem('token');
+        window.location.href = '../pages/login.html';
+        return false;
+    }
+    
+    return true;
+}
+
+function authHeaders(isJson = true) {
+    const token = localStorage.getItem('token') || '';
+    const response = { Authorization: `Bearer ${token}` };
+    if (isJson) response['Content-Type'] = 'application/json';
+    return response;
+}
+
+function obterEmailDoToken() {
+    const token = localStorage.getItem('token');
+    if (!token) return null;
+    
+    try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        return payload.sub;
+    } catch (error) {
+        console.log('Erro ao decodificar token:', error.message);
+        return null;
+    }
+}
+
+class APIService {
+    static async getCampanhas() {
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas`, {
+            headers: authHeaders(false) 
+        });
+        if (!response.ok) throw new Error('Erro ao carregar campanhas');
+        return await response.json();
+    }
+
+    static async criarCampanha(dados, arquivo = null) {
+        const formData = new FormData();
+        
+        const campanhaBlob = new Blob([JSON.stringify(dados)], {
+            type: 'application/json'
+        });
+        formData.append('campanha', campanhaBlob);
+        
+        if (arquivo) {
+            formData.append('imagemCapa', arquivo);
+        }
+        
+        console.log('Enviando form-data com application/json...');
+        console.log('Dados da campanha:', JSON.stringify(dados, null, 2));
+        console.log('Arquivo:', arquivo ? arquivo.name : 'Nenhum');
+        
+        const token = localStorage.getItem('token') || '';
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        
+        console.log('Response status:', response.status);
+        
+        if (!response.ok) throw new Error('Erro ao criar campanha');
+        return await response.json();
+    }
+
+    static async atualizarCampanha(id, dados, arquivo = null) {
+        const formData = new FormData();
+        
+        const campanhaBlob = new Blob([JSON.stringify(dados)], {
+            type: 'application/json'
+        });
+        formData.append('campanha', campanhaBlob);
+        
+        if (arquivo) {
+            formData.append('imagemCapa', arquivo);
+        }
+        
+        const token = localStorage.getItem('token') || '';
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas/${id}`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `Bearer ${token}`
+            },
+            body: formData
+        });
+        if (!response.ok) throw new Error('Erro ao atualizar campanha');
+        return await response.json();
+    }
+
+    static async deletarCampanha(id) {
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas/${id}`, {
+            method: 'DELETE',
+            headers: authHeaders(false)
+        });
+        if (!response.ok) throw new Error('Erro ao deletar campanha');
+    }
+
+    static async getCategorias() {
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas/categorias`, {
+            headers: authHeaders(false)
+        });
+        if (!response.ok) throw new Error('Erro ao carregar categorias');
+        return await response.json();
+    }
+
+    static async getCertificados() {
+        const response = await fetch(`${API_CONFIG.baseURL}/campanhas/certificados`, {
+            headers: authHeaders(false)
+        });
+        if (!response.ok) throw new Error('Erro ao carregar certificados');
+        return await response.json();
+    }
+}
+
+class APIServiceNecessidades {
+    static async getNecessidadesCampanha(campanhaId) {
+        const response = await fetch(`${API_CONFIG.baseURL}/necessidade/campanhas/${campanhaId}/necessidades`, {
+            headers: authHeaders(false)
+        });
+        if (!response.ok) throw new Error('Erro ao carregar necessidades');
+        return await response.json();
+    }
+
+    static async criarNecessidade(campanhaId, necessidade) {
+        const response = await fetch(`${API_CONFIG.baseURL}/necessidade/campanhas/${campanhaId}/necessidade`, {
+            method: 'POST',
+            headers: authHeaders(true),  
+            body: JSON.stringify(necessidade)
+        });
+        if (!response.ok) throw new Error('Erro ao criar necessidade');
+        return await response.json();
+    }
+
+    static async atualizarNecessidade(necessidadeId, necessidade) {
+        const response = await fetch(`${API_CONFIG.baseURL}/necessidade/necessidades/${necessidadeId}`, {
+            method: 'PUT',
+            headers: authHeaders(true), 
+            body: JSON.stringify(necessidade)
+        });
+        if (!response.ok) throw new Error('Erro ao atualizar necessidade');
+        return await response.json();
+    }
+
+    static async deletarNecessidade(necessidadeId) {
+        const response = await fetch(`${API_CONFIG.baseURL}/necessidade/necessidades/${necessidadeId}`, {
+            method: 'DELETE',
+            headers: authHeaders(false) 
+        });
+        if (!response.ok) throw new Error('Erro ao deletar necessidade');
+    }
+}
+
 class GerenciadorCampanhas {
     constructor() {
         this.campanhas = [];
         this.inicializar();
     }
 
-    inicializar() {
+    async inicializar() {
+        if (!verificarAutenticacao()) {
+            return;
+        }
+
+        try {
+            console.log('Tentando carregar campanhas da API...');
+            const campanhas = await APIService.getCampanhas();
+
+            const emailUsuarioAtual = obterEmailDoToken();
+            console.log('Email do usuário atual:', emailUsuarioAtual);
+            
+            const campanhasFiltradas = campanhas.filter(c => {
+                return c.organizador === emailUsuarioAtual;
+            });
+            
+            this.campanhas = await Promise.all(campanhasFiltradas.map(async c => {
+
+                let necessidades = '[]';
+                try {
+                    const necessidadesAPI = await APIServiceNecessidades.getNecessidadesCampanha(c.id);
+                    necessidades = JSON.stringify(necessidadesAPI.map(n => ({
+                        id: n.id,
+                        nome: n.nome,
+                        quantidade: n.quantidadeNecessaria,
+                        formato: n.unidadeMedida
+                    })));
+                } catch (error) {
+                    console.log(`Erro ao carregar necessidades da campanha ${c.id}:`, error.message);
+                }
+
+                return {
+                    id: c.id,
+                    titulo: c.titulo,
+                    local: c.endereco,
+                    dataInicio: c.dtInicio?.split('T')[0] || '',
+                    dataFim: c.dt_fim?.split('T')[0] || '',
+                    urlImagem: c.imagemCapa,
+                    status: this.determinarStatus(c.dt_fim),
+                    necessidades: necessidades,
+                    certificados: c.tipoCertificado || '',
+                    categoria: c.categoriaCampanha || '',
+                    descricao: c.descricao || ''
+                };
+            }));
+            console.log('Campanhas carregadas da API:', this.campanhas);
+        } catch (error) {
+            console.log('Erro ao conectar com a API:', error.message);
+            alert('Erro ao conectar com o servidor. Tente novamente mais tarde.');
+            this.campanhas = [];
+        }
+        
         this.renderizarCampanhas();
         this.iniciarVerificadorExpiracao();
+    }
+
+    determinarStatus(dataFim) {
+        if (!dataFim) return 'ativa';
+        const hoje = new Date();
+        hoje.setHours(0, 0, 0, 0);
+        const fim = new Date(dataFim);
+        fim.setHours(0, 0, 0, 0);
+        return fim < hoje ? 'expirada' : 'ativa';
     }
 
     salvarCampanhas() {
@@ -33,37 +263,54 @@ class GerenciadorCampanhas {
     }
 
     criarCard(campanha) {
-        const dataInicio = new Date(campanha.dataInicio).toLocaleDateString('pt-BR');
-        const dataFim = new Date(campanha.dataFim).toLocaleDateString('pt-BR');
+        const dataInicio = campanha.dataInicio ? 
+            campanha.dataInicio.split('-').reverse().join('/') : 
+            'Data não informada';
+        const dataFim = campanha.dataFim ? 
+            campanha.dataFim.split('-').reverse().join('/') : 
+            'Data não informada';
+        
+        let enderecoTexto = 'Endereço não informado';
+        if (campanha.local && typeof campanha.local === 'object') {
+            const { logradouro, numero, bairro, cidade } = campanha.local;
+            enderecoTexto = `${logradouro || ''} ${numero || ''}, ${bairro || ''}, ${cidade || ''}`.replace(/\s+/g, ' ').trim();
+            if (enderecoTexto === ',') enderecoTexto = 'Endereço não informado';
+        } else if (campanha.local && typeof campanha.local === 'string') {
+            enderecoTexto = campanha.local;
+        }
+        
         const botaoEditar = campanha.status === 'ativa' ? 
-            `<button class="btn-editar" onclick="gerenciadorCampanhas.editarCampanha(${campanha.id})">✏️ Editar</button>` : '';
+            `<button class="btn-editar" onclick="event.stopPropagation(); gerenciadorCampanhas.editarCampanha(${campanha.id})">✏️ Editar</button>` : '';
+        
+        setTimeout(() => this.carregarImagemCampanha(campanha.id), 100);
         
         return `
             <div class="cartao-campanha">
-                <div class="imagem-campanha">
-                    ${campanha.urlImagem ? `<img src="${campanha.urlImagem}" alt="${campanha.titulo}" onerror="this.style.display='none'">` : ''}
+                <div class="imagem-campanha" onclick="abrirCampanha(${campanha.id})" style="cursor: pointer;">
+                    <img id="imagem-campanha-${campanha.id}" src="" alt="${campanha.titulo}" style="display: none;">
                     <div class="titulo-campanha">${campanha.titulo}</div>
                     ${botaoEditar}
                 </div>
                 <div class="info-campanha">
-                    <div><strong>Local do evento:</strong> ${campanha.local}</div>
+                    <div><strong>Local do evento:</strong> ${enderecoTexto}</div>
                     <div><strong>Data de início:</strong> ${dataInicio}</div>
                     <div><strong>Data de fim:</strong> ${dataFim}</div>
                 </div>
             </div>`;
     }
-
     verificarCampanhasExpiradas() {
         const hoje = new Date();
         hoje.setHours(0, 0, 0, 0);
         let mudou = false;
 
         this.campanhas.forEach(campanha => {
-            const dataFim = new Date(campanha.dataFim);
-            dataFim.setHours(0, 0, 0, 0);
-            if (campanha.status === 'ativa' && dataFim < hoje) {
-                campanha.status = 'expirada';
-                mudou = true;
+            if (campanha.dataFim) {
+                const dataFim = new Date(campanha.dataFim);
+                dataFim.setHours(0, 0, 0, 0);
+                if (campanha.status === 'ativa' && dataFim < hoje) {
+                    campanha.status = 'expirada';
+                    mudou = true;
+                }
             }
         });
 
@@ -78,64 +325,31 @@ class GerenciadorCampanhas {
         this.verificarCampanhasExpiradas();
     }
 
-    mostrarNotificacao(mensagem) {
-        const notificacao = document.createElement('div');
-        notificacao.style.cssText = `position: fixed; top: 20px; right: 20px; background: #8BC6A3; color: white; padding: 15px 25px; border-radius: 10px; box-shadow: 0 5px 15px #000000; z-index: 2000; font-weight: 500; animation: deslizarEntrada 0.3s ease;`;
-        notificacao.textContent = mensagem;
-
-        if (!document.querySelector('style[data-notification]')) {
-            const estilo = document.createElement('style');
-            estilo.setAttribute('data-notification', 'true');
-            estilo.textContent = '@keyframes deslizarEntrada { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }';
-            document.head.appendChild(estilo);
-        }
-
-        document.body.appendChild(notificacao);
-        setTimeout(() => {
-            notificacao.style.animation = 'deslizarEntrada 0.3s ease reverse';
-            setTimeout(() => notificacao.remove(), 300);
-        }, 3000);
-    }
-
     editarCampanha(id) {
         const campanha = this.campanhas.find(c => c.id === id);
         if (campanha) abrirModal(campanha);
     }
 
-    adicionarDadosExemplo() {
-        const hoje = new Date();
-        const proximaSemana = new Date(hoje);
-        proximaSemana.setDate(proximaSemana.getDate() + 7);
-        const ontem = new Date(hoje);
-        ontem.setDate(ontem.getDate() - 1);
-
-        this.campanhas = [
-            {
-                id: 1, titulo: 'Doação de Alimentos', local: 'UTFPR',
-                dataInicio: hoje.toISOString().split('T')[0], dataFim: proximaSemana.toISOString().split('T')[0],
-                urlImagem: 'https://img.migalhas.com.br/gf_Base/empresas/miga/imagens/C834420846D5510C90B88E720709A471B8E5_doacao.jpg',
-                status: 'ativa', necessidades: JSON.stringify([
-                    {id: 1, nome: 'Arroz', quantidade: 50, formato: 'kg'},
-                    {id: 2, nome: 'Feijão', quantidade: 30, formato: 'kg'},
-                    {id: 3, nome: 'Óleo', quantidade: 20, formato: 'litros'}
-                ]),
-                certificados: 'fulano', categoria: 'a',
-                descricao: 'Campanha de arrecadação de alimentos para famílias carentes'
-            },
-            {
-                id: 2, titulo: 'Campanha de Agasalhos', local: 'Praça 500',
-                dataInicio: ontem.toISOString().split('T')[0], dataFim: ontem.toISOString().split('T')[0],
-                urlImagem: 'https://ogimg.infoglobo.com.br/in/22799539-a0c-cff/FT1086A/70757225.jpg',
-                status: 'expirada', necessidades: JSON.stringify([
-                    {id: 3, nome: 'Casacos', quantidade: 100, formato: 'unidades'},
-                    {id: 4, nome: 'Cobertores', quantidade: 50, formato: 'unidades'}
-                ]),
-                certificados: 'fulano', categoria: 'b',
-                descricao: 'Arrecadação de agasalhos para o período de inverno.'
+    async carregarImagemCampanha(campanhaId) {
+    try {
+        const response = await fetch(`http://localhost:8080/campanhas/${campanhaId}/imagem`, {
+            headers: authHeaders(false)
+        });
+        
+        if (response.ok) {
+            const imageBlob = await response.blob();
+            const imageUrl = URL.createObjectURL(imageBlob);
+            
+            const imgElement = document.getElementById(`imagem-campanha-${campanhaId}`);
+            if (imgElement) {
+                imgElement.src = imageUrl;
+                imgElement.style.display = 'block';
             }
-        ];
-        this.renderizarCampanhas();
+        }
+    } catch (error) {
+        console.log(`Erro ao carregar imagem da campanha ${campanhaId}:`, error.message);
     }
+}
 }
 
 let gerenciadorCampanhas;
@@ -157,13 +371,10 @@ function configurarModalNecessidades() {
     const btnAdicionar = document.getElementById('btnAdicionarItem');
     
     if (modoEdicaoNecessidades) {
-        inputItem.disabled = true;
-        inputFormato.disabled = true;
-        btnAdicionar.disabled = true;
-        btnAdicionar.textContent = 'Não disponível';
-        inputItem.value = '';
-        document.getElementById('quantidadeItemModal').value = '';
-        inputFormato.selectedIndex = 0;
+        inputItem.disabled = false;
+        inputFormato.disabled = false;
+        btnAdicionar.disabled = false;
+        btnAdicionar.textContent = 'Adicionar';
     } else {
         inputItem.disabled = false;
         inputFormato.disabled = false;
@@ -171,13 +382,11 @@ function configurarModalNecessidades() {
         btnAdicionar.textContent = 'Adicionar';
     }
 }
-
 function fecharModalNecessidades() {
     document.getElementById('modalNecessidades').style.display = 'none';
 }
 
 function adicionarItemModal() {
-    if (modoEdicaoNecessidades) return;
     
     const nome = document.getElementById('nomeItemModal').value.trim();
     const quantidade = document.getElementById('quantidadeItemModal').value;
@@ -203,8 +412,8 @@ function adicionarItemModal() {
     document.getElementById('formatoItemModal').selectedIndex = 0;
 }
 
+
 function removerItemModal(id) {
-    if (modoEdicaoNecessidades) return;
     necessidadesAtual = necessidadesAtual.filter(item => item.id !== id);
     renderizarListaNecessidades();
 }
@@ -240,10 +449,7 @@ function renderizarListaNecessidades() {
                 } 
                 ${item.formato}
             </span>
-            ${!modoEdicaoNecessidades ? 
-                `<button class="btn-remover-item" onclick="removerItemModal(${item.id})">×</button>` 
-                : ''
-            }
+            <button class="btn-remover-item" onclick="removerItemModal(${item.id})">×</button>
         </div>
     `).join('');
 }
@@ -265,13 +471,18 @@ function carregarNecessidadesExistentes(necessidadesString) {
     }
     
     try {
-        necessidadesAtual = JSON.parse(necessidadesString);
+        const necessidades = JSON.parse(necessidadesString);
+        necessidadesAtual = necessidades.map(item => ({
+            ...item,
+            jaExiste: true
+        }));
     } catch {
         necessidadesAtual = necessidadesString.split(',').map((item, index) => ({
             id: Date.now() + index,
             nome: item.trim(),
             quantidade: 1,
-            formato: 'unidades'
+            formato: 'unidades',
+            jaExiste: true
         }));
     }
     
@@ -292,7 +503,15 @@ function criarNovaCampanha() {
 function obterDadosFormulario() {
     return {
         nome: document.getElementById('nomeCampanha').value.trim(),
-        endereco: document.getElementById('enderecoEvento').value.trim(),
+        
+        endereco:{
+            logradouro: document.getElementById('logradouro').value.trim(),
+            numero: document.getElementById('numero').value.trim(),
+            bairro: document.getElementById('bairro').value.trim(),
+            cidade: document.getElementById('cidade').value.trim(),
+            estado: document.getElementById('estado').value.trim(),
+            cep: document.getElementById('cep').value.trim()
+        },
         necessidades: obterNecessidadesJSON(),
         certificados: document.getElementById('certificados').value,
         categoria: document.getElementById('categoriaCampanha').value,
@@ -302,21 +521,54 @@ function obterDadosFormulario() {
     };
 }
 
+function obterArquivoImagem() {
+    const input = document.getElementById('arquivoImagem');
+    return input.files[0] || null;
+}
+
 function validarDados(dados) {
     if (!dados.nome || !dados.endereco || !dados.dataInicio || !dados.dataFinal) {
         alert('Por favor, preencha os campos obrigatórios: Nome da Campanha, Endereço do Evento, Data de Início e Data Final.');
         return false;
     }
-    if (new Date(dados.dataFinal) <= new Date(dados.dataInicio)) {
+    
+    const dataInicio = new Date(dados.dataInicio);
+    const dataFinal = new Date(dados.dataFinal);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    
+    if (dataFinal <= dataInicio) {
         alert('A data final deve ser posterior à data de início.');
         return false;
     }
+    
+    if (dataFinal < hoje) {
+        alert('A data final não pode ser anterior à data atual. Não é possível criar campanhas que já expiraram.');
+        return false;
+    }
+    
     return true;
 }
 
 function preencherFormulario(campanha) {
     document.getElementById('nomeCampanha').value = campanha.titulo || '';
-    document.getElementById('enderecoEvento').value = campanha.local || '';
+    
+    if (campanha.local && typeof campanha.local === 'object') {
+        document.getElementById('logradouro').value = campanha.local.logradouro || '';
+        document.getElementById('numero').value = campanha.local.numero || '';
+        document.getElementById('bairro').value = campanha.local.bairro || '';
+        document.getElementById('cidade').value = campanha.local.cidade || '';
+        document.getElementById('estado').value = campanha.local.estado || '';
+        document.getElementById('cep').value = campanha.local.cep || '';
+    } else {
+        document.getElementById('logradouro').value = '';
+        document.getElementById('numero').value = '';
+        document.getElementById('bairro').value = '';
+        document.getElementById('cidade').value = '';
+        document.getElementById('estado').value = '';
+        document.getElementById('cep').value = '';
+    }
+
     document.getElementById('dataInicio').value = campanha.dataInicio || '';
     document.getElementById('dataFinal').value = campanha.dataFim || '';
     document.getElementById('descricaoCampanha').value = campanha.descricao || '';
@@ -375,67 +627,138 @@ function fecharModal() {
     configurarModal(false);
 }
 
-function salvarCampanha() {
+async function salvarCampanha() {
     const dados = obterDadosFormulario();
     if (!validarDados(dados)) return;
 
-    const novaCampanha = {
-        id: Date.now(), 
-        titulo: dados.nome, 
-        local: dados.endereco,
-        dataInicio: dados.dataInicio, 
-        dataFim: dados.dataFinal, 
-        urlImagem: null,
-        status: new Date(dados.dataFinal) < new Date() ? 'expirada' : 'ativa',
-        necessidades: dados.necessidades, 
-        certificados: dados.certificados,
-        categoria: dados.categoria, 
-        descricao: dados.descricao
-    };
+    try {
 
-    gerenciadorCampanhas.campanhas.push(novaCampanha);
-    gerenciadorCampanhas.renderizarCampanhas();
-    gerenciadorCampanhas.mostrarNotificacao('Campanha criada com sucesso!');
-    fecharModal();
-}
-
-function salvarEdicaoCampanha(id) {
-    const dados = obterDadosFormulario();
-    if (!validarDados(dados)) return;
-
-    const campanha = gerenciadorCampanhas.campanhas.find(c => c.id === id);
-    if (campanha) {
-        Object.assign(campanha, {
-            titulo: dados.nome, 
-            local: dados.endereco, 
-            necessidades: dados.necessidades,
-            certificados: dados.certificados, 
-            categoria: dados.categoria,
-            dataInicio: dados.dataInicio, 
-            dataFim: dados.dataFinal, 
+        console.log('ENVIANDO - dataInicio:', dados.dataInicio);
+        console.log('ENVIANDO - dataFinal:', dados.dataFinal);
+        const dadosAPI = {
+            titulo: dados.nome,
             descricao: dados.descricao,
-            status: new Date(dados.dataFinal) < new Date() ? 'expirada' : 'ativa'
-        });
-
-        gerenciadorCampanhas.salvarCampanhas();
-        gerenciadorCampanhas.renderizarCampanhas();
-        gerenciadorCampanhas.mostrarNotificacao('Campanha atualizada com sucesso!');
+            categoriaCampanha: dados.categoria,
+            endereco: dados.endereco,
+            tipoCertificado: dados.certificados,
+            dtInicio: new Date(dados.dataInicio + 'T00:00:00.000Z').toISOString(),
+            dt_fim: new Date(dados.dataFinal + 'T00:00:00.000Z').toISOString(),
+            status: "ativa"
+        };
+        
+        console.log('ENVIANDO - dtInicio formatado:', dadosAPI.dtInicio);
+        console.log('ENVIANDO - dt_fim formatado:', dadosAPI.dt_fim);
+        const arquivo = obterArquivoImagem();
+        const novaCampanha = await APIService.criarCampanha(dadosAPI, arquivo);
+        
+        if (necessidadesAtual.length > 0) {
+            for (const necessidade of necessidadesAtual) {
+                const necessidadeAPI = {
+                    nome: necessidade.nome,
+                    unidadeMedida: necessidade.formato,
+                    quantidadeNecessaria: necessidade.quantidade,
+                    quantidadeRecebida: 0
+                };
+                
+                try {
+                    await APIServiceNecessidades.criarNecessidade(novaCampanha.id, necessidadeAPI);
+                } catch (error) {
+                    console.log('Erro ao salvar necessidade:', necessidade.nome, error.message);
+                }
+            }
+        }
+        
+        await gerenciadorCampanhas.inicializar();
         fecharModal();
+        
+    } catch (error) {
+        alert('Erro ao salvar campanha: ' + error.message);
     }
 }
 
-function excluirCampanha(id) {
-    if (confirm('Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.')) {
-        gerenciadorCampanhas.campanhas = gerenciadorCampanhas.campanhas.filter(c => c.id !== id);
-        gerenciadorCampanhas.salvarCampanhas();
-        gerenciadorCampanhas.renderizarCampanhas();
-        gerenciadorCampanhas.mostrarNotificacao('Campanha excluída com sucesso!');
+async function salvarEdicaoCampanha(id) {
+    const dados = obterDadosFormulario();
+    if (!validarDados(dados)) return;
+
+    try {
+        const dadosAPI = {
+            titulo: dados.nome,
+            descricao: dados.descricao,
+            categoriaCampanha: dados.categoria,
+            endereco: dados.endereco,
+            tipoCertificado: dados.certificados,
+            dtInicio: new Date(dados.dataInicio + 'T00:00:00.000Z').toISOString(),
+            dt_fim: new Date(dados.dataFinal + 'T00:00:00.000Z').toISOString(),
+            status: "ativa"
+        };
+
+        const arquivo = obterArquivoImagem();
+        await APIService.atualizarCampanha(id, dadosAPI, arquivo);
+        
+        let necessidadesExistentes = [];
+        try {
+            necessidadesExistentes = await APIServiceNecessidades.getNecessidadesCampanha(id);
+        } catch (error) {
+            console.log('Erro ao carregar necessidades existentes:', error.message);
+        }
+        
+        for (const necessidadeAtual of necessidadesAtual) {
+            if (necessidadeAtual.jaExiste) {
+                const necessidadeExistente = necessidadesExistentes.find(n => n.nome === necessidadeAtual.nome);
+                if (necessidadeExistente) {
+                    const necessidadeAtualizada = {
+                        nome: necessidadeExistente.nome,
+                        unidadeMedida: necessidadeExistente.unidadeMedida,
+                        quantidadeNecessaria: necessidadeAtual.quantidade,
+                        quantidadeRecebida: necessidadeExistente.quantidadeRecebida || 0
+                    };
+                    await APIServiceNecessidades.atualizarNecessidade(necessidadeExistente.id, necessidadeAtualizada);
+                }
+            } else {
+                const novaNecessidade = {
+                    nome: necessidadeAtual.nome,
+                    unidadeMedida: necessidadeAtual.formato,
+                    quantidadeNecessaria: necessidadeAtual.quantidade,
+                    quantidadeRecebida: 0
+                };
+                await APIServiceNecessidades.criarNecessidade(id, novaNecessidade);
+            }
+        }
+        
+        const necessidadesAtuaisNomes = necessidadesAtual.map(n => n.nome);
+        for (const necessidadeExistente of necessidadesExistentes) {
+            if (!necessidadesAtuaisNomes.includes(necessidadeExistente.nome)) {
+                await APIServiceNecessidades.deletarNecessidade(necessidadeExistente.id);
+            }
+        }
+        
+        await gerenciadorCampanhas.inicializar();
         fecharModal();
+        
+    } catch (error) {
+        alert('Erro ao atualizar campanha: ' + error.message);
+    }
+}
+
+async function excluirCampanha(id) {
+    if (confirm('Tem certeza que deseja excluir esta campanha? Esta ação não pode ser desfeita.')) {
+        try {
+            console.log('Tentando excluir na API...');
+            await APIService.deletarCampanha(id);
+            console.log('Campanha excluída da API');
+            
+            await gerenciadorCampanhas.inicializar();
+            fecharModal();
+            
+        } catch (error) {
+            console.log('Erro na API:', error.message);
+            alert('Erro ao excluir campanha: ' + error.message);
+        }
     }
 }
 
 function limparFormulario() {
-    ['nomeCampanha', 'enderecoEvento', 'dataInicio', 'dataFinal', 'descricaoCampanha', 'arquivoImagem'].forEach(id => {
+    ['nomeCampanha', 'logradouro', 'numero', 'bairro', 'cidade', 'estado', 'cep', 'dataInicio', 'dataFinal', 'descricaoCampanha', 'arquivoImagem'].forEach(id => {
         const elemento = document.getElementById(id);
         if (elemento) elemento.value = '';
     });
@@ -466,8 +789,34 @@ document.addEventListener('click', e => {
     if (e.target.id === 'modalCampanha') fecharModal();
 });
 
+function configurarValidacoesDatas() {
+    const hoje = new Date().toISOString().split('T')[0];
+    const inputDataFinal = document.getElementById('dataFinal');
+    const inputDataInicio = document.getElementById('dataInicio');
+    
+    if (inputDataFinal) inputDataFinal.min = hoje;
+    
+    if (inputDataInicio && inputDataFinal) {
+        inputDataFinal.addEventListener('change', () => {
+            const dataFinal = inputDataFinal.value;
+            if (dataFinal && dataFinal < hoje) {
+                alert('A data final não pode ser anterior à data atual.');
+                inputDataFinal.value = '';
+            }
+        });
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    if (!verificarAutenticacao()) {
+        return;
+    }
+    
     gerenciadorCampanhas = new GerenciadorCampanhas();
+    configurarValidacoesDatas();   
+    carregarCategorias();
+    carregarCertificados();
+    
     
     const inputArquivo = document.getElementById('arquivoImagem');
     const uploadArea = document.querySelector('.upload-area');
@@ -480,6 +829,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 '<div class="upload-circle">+</div>';
         });
     }
-    
-    setTimeout(() => gerenciadorCampanhas.adicionarDadosExemplo(), 500);
 });
+
+function abrirCampanha(campanhaId) {
+    window.location.href = `../pages/CampanhaAdm.html?id=${campanhaId}`;
+}
+
+async function carregarCategorias() {
+    try {
+        const categorias = await APIService.getCategorias();
+        const selectCategoria = document.getElementById('categoriaCampanha');
+        
+        selectCategoria.innerHTML = '<option value="">Selecione uma categoria</option>';
+        
+        categorias.forEach(categoria => {
+            const option = document.createElement('option');
+            option.value = categoria;
+            option.textContent = categoria;
+            selectCategoria.appendChild(option);
+        });
+        
+    } catch (error) {
+        console.log('Erro ao carregar categorias:', error.message);
+    }
+}
+
+async function carregarCertificados() {
+    try {
+        const certificados = await APIService.getCertificados();
+        const selectCertificados = document.getElementById('certificados');
+        
+        selectCertificados.innerHTML = '<option value="">Selecione um certificado</option>';
+        
+        certificados.forEach(certificado => {
+            const option = document.createElement('option');
+            option.value = certificado;
+            option.textContent = certificado;
+            selectCertificados.appendChild(option);
+        });
+        
+    } catch (error) {
+        console.log('Erro ao carregar certificados:', error.message);
+    }
+}
