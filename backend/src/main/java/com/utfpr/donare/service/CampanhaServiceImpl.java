@@ -3,13 +3,14 @@ package com.utfpr.donare.service;
 import com.utfpr.donare.domain.Campanha;
 import com.utfpr.donare.domain.EmailType;
 import com.utfpr.donare.domain.Endereco;
-import com.utfpr.donare.dto.CampanhaRequestDTO;
-import com.utfpr.donare.dto.CampanhaResponseDTO;
-import com.utfpr.donare.dto.EmailRequestDTO;
-import com.utfpr.donare.dto.VoluntarioResponseDTO;
+import com.utfpr.donare.domain.User;
+import com.utfpr.donare.dto.*;
 import com.utfpr.donare.exception.ResourceNotFoundException;
 import com.utfpr.donare.mapper.CampanhaMapper;
+import com.utfpr.donare.mapper.UserMapper;
 import com.utfpr.donare.repository.CampanhaRepository;
+import com.utfpr.donare.repository.ParticipacaoRepository;
+import com.utfpr.donare.service.interfaces.CampanhaService;
 import jakarta.persistence.criteria.Predicate;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -22,23 +23,23 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class CampanhaServiceImpl implements CampanhaService {
 
+    private final ParticipacaoRepository participacaoRepository;
     private final CampanhaRepository campanhaRepository;
     private final CampanhaMapper campanhaMapper;
+    private final UserMapper userMapper;
     private final EmailService emailService;
+    private final GeocodingService geocodingService;
 
     @Override
     @Transactional
-    public CampanhaResponseDTO criarCampanha(CampanhaRequestDTO campanhaRequestDTO, MultipartFile imagemCapa, String organizadorEmail) {
+    public CampanhaResponseDTO saveCampanha(CampanhaRequestDTO campanhaRequestDTO, MultipartFile imagemCapa, String organizadorEmail) {
         Campanha campanha = campanhaMapper.requestDtoToEntity(campanhaRequestDTO);
         campanha.setOrganizador(organizadorEmail);
 
@@ -52,8 +53,17 @@ public class CampanhaServiceImpl implements CampanhaService {
                 throw new RuntimeException("Erro ao processar imagem de capa", e);
             }
         }
+
+        double[] coords = geocodingService.obterCoordenadas(
+                campanhaRequestDTO.getEndereco().getLogradouro(),
+                campanhaRequestDTO.getEndereco().getCidade(),
+                campanhaRequestDTO.getEndereco().getEstado()
+        );
+
         Endereco endereco = campanha.getEndereco();
         endereco.setCampanha(campanha);
+        endereco.setLatitude(coords[0]);
+        endereco.setLongitude(coords[1]);
 
         campanha.setAtivo(true);
 
@@ -63,7 +73,7 @@ public class CampanhaServiceImpl implements CampanhaService {
     }
 
     // Atualizar método de filtro para incluir usuário
-    private Specification<Campanha> criarFiltroCampanha(String tipo, String localidade, String usuario) {
+    private Specification<Campanha> criarFiltroCampanha(String tipo, String localidade, String usuario, String titulo) {
         return (root, query, criteriaBuilder) -> {
             List<Predicate> predicates = new ArrayList<>();
 
@@ -76,6 +86,9 @@ public class CampanhaServiceImpl implements CampanhaService {
             if (usuario != null && !usuario.isEmpty()) {
                 predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("organizador")), "%" + usuario.toLowerCase() + "%"));
             }
+            if (titulo != null && !titulo.isEmpty()) {
+                predicates.add(criteriaBuilder.like(criteriaBuilder.lower(root.get("titulo")), "%" + titulo.toLowerCase() + "%"));
+            }
 
             return criteriaBuilder.and(predicates.toArray(new Predicate[0]));
         };
@@ -83,7 +96,7 @@ public class CampanhaServiceImpl implements CampanhaService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CampanhaResponseDTO> listarHistoricoCampanhas(String tipo, String localidade, String usuario, int page, int size, String sort) {
+    public List<CampanhaResponseDTO> ListCampaignHistory(String tipo, String localidade, String usuario, String titulo, int page, int size, String sort) {
         Sort.Direction direction = Sort.Direction.DESC;
         String property = "dtInicio";
         if (sort != null && !sort.isEmpty()) {
@@ -95,7 +108,7 @@ public class CampanhaServiceImpl implements CampanhaService {
         }
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, property));
-        Specification<Campanha> spec = criarFiltroCampanha(tipo, localidade, usuario);
+        Specification<Campanha> spec = criarFiltroCampanha(tipo, localidade, usuario, titulo);
         Page<Campanha> campanhasPage = campanhaRepository.findAll(spec, pageable);
 
         return campanhasPage.getContent().stream()
@@ -105,7 +118,7 @@ public class CampanhaServiceImpl implements CampanhaService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CampanhaResponseDTO> listarCampanhas(String tipo, String localidade, String usuario, int page, int size, String sort) {
+    public List<CampanhaResponseDTO> findCampanhas(String tipo, String localidade, String usuario, String titulo, int page, int size, String sort) {
         Sort.Direction direction = Sort.Direction.DESC;
         String property = "dtInicio";
         if (sort != null && !sort.isEmpty()) {
@@ -118,7 +131,7 @@ public class CampanhaServiceImpl implements CampanhaService {
 
         Pageable pageable = PageRequest.of(page, size, Sort.by(direction, property));
 
-        Specification<Campanha> spec = criarFiltroCampanha(tipo, localidade, usuario);
+        Specification<Campanha> spec = criarFiltroCampanha(tipo, localidade, usuario, titulo);
         Specification<Campanha> ativoSpec = (root, query, criteriaBuilder) ->
                 criteriaBuilder.isTrue(root.get("ativo"));
 
@@ -131,10 +144,9 @@ public class CampanhaServiceImpl implements CampanhaService {
                 .collect(Collectors.toList());
     }
 
-
     @Override
     @Transactional(readOnly = true)
-    public CampanhaResponseDTO buscarCampanhaPorId(Long id) {
+    public CampanhaResponseDTO findCampanhaPorId(Long id) {
         Campanha campanha = campanhaRepository.findByIdAndAtivoTrue(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
 
@@ -143,9 +155,8 @@ public class CampanhaServiceImpl implements CampanhaService {
 
     @Override
     @Transactional
-    public CampanhaResponseDTO atualizarCampanha(Long id, CampanhaRequestDTO campanhaRequestDTO, MultipartFile imagemCapa, String organizadorEmail) {
-        Campanha campanha = campanhaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
+    public CampanhaResponseDTO updateCampanha(Long id, CampanhaRequestDTO campanhaRequestDTO, MultipartFile imagemCapa, String organizadorEmail) {
+        Campanha campanha = findCampanhaById(id);
 
         if (!campanha.getOrganizador().equals(organizadorEmail)) {
             throw new RuntimeException("Apenas o organizador pode atualizar a campanha");
@@ -186,9 +197,8 @@ public class CampanhaServiceImpl implements CampanhaService {
 
     @Override
     @Transactional
-    public void deletarCampanha(Long id, String organizadorEmail) {
-        Campanha campanha = campanhaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
+    public void deleteCampanha(Long id, String organizadorEmail) {
+        Campanha campanha = findCampanhaById(id);
         if (!campanha.getOrganizador().equals(organizadorEmail)) {
             throw new RuntimeException("Apenas o organizador pode deletar a campanha");
         }
@@ -197,25 +207,71 @@ public class CampanhaServiceImpl implements CampanhaService {
 
     @Override
     @Transactional(readOnly = true)
-    public byte[] obterImagemCapa(Long id) {
-        Campanha campanha = campanhaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
+    public byte[] getCoverImage(Long id) {
+        Campanha campanha = findCampanhaById(id);
         return campanha.getImagemCapa();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public String obterImagemCapaContentType(Long id) {
-        Campanha campanha = campanhaRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
+    public String getCoverImageContentType(Long id) {
+        Campanha campanha = findCampanhaById(id);
         return campanha.getImagemCapaContentType();
     }
 
     @Override
     @Transactional(readOnly = true)
-    public List<VoluntarioResponseDTO> listarVoluntariosPorCampanha(Long id) {
+    public List<UserResponseDTO> listVolunteersByCampaign(Long id) {
         Campanha campanha = campanhaRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
-        return new ArrayList<>();
+
+
+        return participacaoRepository.findByCampanhaId(id).stream()
+                .map(participacao -> userMapper.toUserResponseDTO(participacao.getUser()))
+                .collect(Collectors.toList());
+    }
+
+    private Campanha findCampanhaById(Long id) {
+        return campanhaRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o ID: " + id));
+    }
+
+    public List<CampanhaDistanciaResponseDTO> buscarCampanhasProximas(double latUser, double lonUser) {
+
+        List<Campanha> campanhas = campanhaRepository.findAll();
+
+        return campanhas.stream()
+                .filter(c -> c.getEndereco() != null)
+                .filter(c -> {
+                    Double lat = c.getEndereco().getLatitude();
+                    Double lon = c.getEndereco().getLongitude();
+                    return lat != null && lon != null && lat != 0 && lon != 0;
+                })
+                .map(c -> {
+                    double dist = calcularDistancia(latUser, lonUser,
+                            c.getEndereco().getLatitude(),
+                            c.getEndereco().getLongitude());
+                    return new CampanhaDistanciaResponseDTO(c.getId(),
+                            c.getTitulo(),
+                            c.getDescricao(),
+                            c.getCategoriaCampanha(),
+                            c.getEndereco().getCidade(),
+                            c.getEndereco().getEstado(),
+                            dist);
+                })
+                .filter(dto -> dto.getDistancia() > 0 && dto.getDistancia() <= 800) // limite de 800km
+                .sorted(Comparator.comparingDouble(CampanhaDistanciaResponseDTO::getDistancia))
+                .toList();
+    }
+
+    private double calcularDistancia(double lat1, double lon1, double lat2, double lon2) {
+        final int RAIO_TERRA_KM = 6371;
+        double dLat = Math.toRadians(lat2 - lat1);
+        double dLon = Math.toRadians(lon2 - lon1);
+        double a = Math.sin(dLat / 2) * Math.sin(dLat / 2)
+                + Math.cos(Math.toRadians(lat1)) * Math.cos(Math.toRadians(lat2))
+                * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+        double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        return RAIO_TERRA_KM * c;
     }
 }

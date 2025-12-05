@@ -1,5 +1,6 @@
 package com.utfpr.donare.controller;
 
+import com.utfpr.donare.dto.ComentarioDeleteRequestDTO;
 import com.utfpr.donare.dto.ComentarioRequestDTO;
 import com.utfpr.donare.dto.ComentarioResponseDTO;
 import com.utfpr.donare.dto.ErrorResponse;
@@ -70,9 +71,9 @@ public class ComentarioController {
                             schema = @Schema(implementation = ErrorResponse.class)))
     })
     @GetMapping("/campanhas/{idCampanha}/comentarios")
-    public ResponseEntity<List<ComentarioResponseDTO>> listarComentariosPorCampanha( @PathVariable Long idCampanha) {
+    public ResponseEntity<List<ComentarioResponseDTO>> listCommentsByCampaign( @PathVariable Long idCampanha) {
 
-        List<ComentarioResponseDTO> comentarios = comentarioService.listarComentariosPorCampanha(idCampanha);
+        List<ComentarioResponseDTO> comentarios = comentarioService.listCommentsByCampaign(idCampanha);
         return ResponseEntity.ok(comentarios);
     }
 
@@ -81,7 +82,7 @@ public class ComentarioController {
     @GetMapping("/campanhas/{idCampanha}/comentarios/{idComentario}")
     public ResponseEntity<ComentarioResponseDTO> buscarComentarioPorId(@PathVariable Long idCampanha, @PathVariable Long idComentario) {
 
-        ComentarioResponseDTO comentario = comentarioService.buscarComentarioPorId(idCampanha, idComentario);
+        ComentarioResponseDTO comentario = comentarioService.findComentarioPorId(idCampanha, idComentario);
         return ResponseEntity.ok(comentario);
     }
 
@@ -125,9 +126,9 @@ public class ComentarioController {
                             schema = @Schema(implementation = ErrorResponse.class)))
     })
     @DeleteMapping("/comentarios/{idComentario}")
-    public ResponseEntity<Void> deleteComentario(@PathVariable Long idComentario, @Valid @RequestBody ComentarioRequestDTO comentarioRequestDTO) {
+    public ResponseEntity<Void> deleteComentario(@PathVariable Long idComentario, @Valid @RequestBody ComentarioDeleteRequestDTO comentarioDeleteRequestDTO) {
 
-        comentarioService.deleteComentario(idComentario, comentarioRequestDTO);
+        comentarioService.deleteComentario(idComentario, comentarioDeleteRequestDTO);
         return ResponseEntity.noContent().build();
     }
 }

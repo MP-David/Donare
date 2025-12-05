@@ -33,9 +33,19 @@ public class UserResponseDTO {
     @Schema(description = "Dados do endereço do usuário.")
     private EnderecoResponseDto idEndereco;
 
+    @Schema(description = "GoogleId relacionado ao e-mail do usuário.", example = "123456789")
+    private String googleId;
+
     @Schema(description = "Dados binários da mídia de perfil (imagem, por exemplo) em Base64.", type = "string", format = "byte")
     private byte[] midia;
 
     @Schema(description = "Tipo de conteúdo da mídia de perfil (ex: image/jpeg, image/png).", example = "image/jpeg")
     private String midiaContentType;
+
+    @Schema(description = "Flag que indica se o usuário possui uma senha cadastrada no banco.", example = "false")
+    private boolean contemSenha;
+
+    public void addHasPassword(User user) {
+        this.contemSenha = (user.getPassword() != null && !user.getPassword().isEmpty());
+    }
 }

@@ -3,7 +3,7 @@ body {
 }
 
 h2 {
-    font-size: 2vw;
+    font-size: 1.8rem;
     font-weight: 500;
 }
 
@@ -13,7 +13,7 @@ h2 {
 }
 
 aside {
-    width: 20vw;
+    width: 25%;
     flex-shrink: 0;
     background-color: #7dbfa857;
     padding: 2vw;
@@ -29,6 +29,9 @@ aside h3 {
 
 ul {
     list-style: none;
+    max-height: 290px;
+    overflow-y: auto;
+    padding-right: 5px;
 }
 
 ul li {
@@ -36,6 +39,10 @@ ul li {
     background: #f2f2f2;
     padding: 10px;
     border-radius: 8px;
+}
+
+ul li:hover {
+    background-color: #7DBFA8;
 }
 
 main {
@@ -52,25 +59,49 @@ main {
 }
 
 .categoria h3 {
+    font-size: 1.3rem;
     margin-bottom: 1vh;
+    overflow-x: auto;
 }
 
 .container-campanha {
     display: flex;
     overflow-x: auto;
     gap: 2vw;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: 10px;
 }
 
-.container-campanha::-webkit-scrollbar{
+aside ul::-webkit-scrollbar,
+.container-campanha::-webkit-scrollbar {
     height: 8px;
+    width: 8px;
+}
+
+aside ul::-webkit-scrollbar-track,
+.container-campanha::-webkit-scrollbar-track {
+    background: #f1f1f1;       
+    border-radius: 10px;
+}
+
+aside ul::-webkit-scrollbar-thumb,
+.container-campanha::-webkit-scrollbar-thumb {
+    background-color: #7DBFA8;
+    border-radius: 10px;
+}
+
+aside ul::-webkit-scrollbar-thumb:hover,
+.container-campanha::-webkit-scrollbar-thumb:hover {
+    background-color: #5ea68c;
 }
 
 .card {
-    flex: 0 0 auto;
-    cursor: pointer;
+    flex: 0 0 350px;
+    display: flex;
+    flex-direction: column;
     background: #f2f2f2;
     border-radius: 10px;
-    width: 45vh;
     overflow: hidden;
 }
 
@@ -87,30 +118,131 @@ main {
 }
 
 .infos {
-    padding: 1vh;
+    min-height: 120px;
+    padding: 5px 15px;
 }
 
 .infos h3 {
-    font-size: 1.2vw;
+    font-size: 1.2rem;
 }
 
 .infos p {
-    font-size: 0.9vw;
-    margin-bottom: 1vh;
+    font-size: 1rem;
 }
 
 .acao {
     display: flex;
     justify-content: flex-end;
+    padding: 10px;
+    margin-top: auto;
 }
 
 .seguir {
     background: #7DBFA8;
     border: none;
-    margin-right: 1vw;
-    padding: 1vh 8vh;
     border-radius: 5px;
-    font-weight: bolder;
     color: #f2f2f2;
-    cursor: pointer;
+    padding: 10px 20px;
+    min-width: 120px;
+    font-size: 0.9rem;
+}
+
+.seguir:hover {
+    background-color: #A3D9B1;
+}
+
+@media (max-width: 768px) {
+    .main-container {
+        flex-direction: column;
+    }
+
+    .categoria {
+        width: 100vw;
+    }
+
+    aside {
+        width: 100%;
+        height: auto;
+        position: relative;
+        top: 0;
+        order: 1;
+    }
+
+    aside h3 {
+        margin-top: 5px;
+        font-size: 1rem;
+    }
+
+    aside ul {
+        display: flex;
+        gap: 8px;
+        flex-direction: row;
+    }
+
+    ul li {
+        min-width: 150px;
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    main {
+        order: 2;
+        max-width: 100%;
+    }
+
+    .card {
+        max-width: 300px;
+        max-height: 250px;
+    }
+
+    .imagem {
+        height: 60%;
+    }
+
+    .infos p,
+    .infos h3 {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .seguir {
+        padding: 6px 2px;
+    }
+}
+
+@media (max-width: 480px) {
+
+    .categoria {
+        overflow-x: auto;
+        margin-top: 10px;
+        margin-bottom: 10px;
+    }
+
+    h2 {
+        font-size: 1.4rem;
+    }
+
+    ul li,
+    .infos p{
+        font-size: 14px;
+    }
+
+    .card {
+        max-width: 250px;
+        height: 250px;
+    }
+
+    .imagem {
+        height: 55%;
+    }
+
+    .seguir {
+        margin: 13px 0;
+        width: 100%;
+        padding: 6px;
+        font-size: 0.85rem;
+    }
 }

@@ -1,3 +1,5 @@
+const API_BASE = 'http://localhost:8080';
+
 document.querySelector('form').addEventListener('submit', function (e) {
     e.preventDefault();
 
@@ -36,8 +38,8 @@ document.querySelector('form').addEventListener('submit', function (e) {
         return;
     }
 
-    if (estado.length != 2) {
-        alert('Lembre-se: a Sigla possuiu dois caracteres');
+    if (estado.length === 2) {
+        alert('Lembre-se: Digite seu estado por extenso');
         document.getElementById('estado').classList.add('input-error');
         document.getElementById('label-estado').classList.add('label-error');
         document.getElementById('estado').focus();
@@ -84,15 +86,13 @@ document.querySelector('form').addEventListener('submit', function (e) {
         password: senha
     };
 
-    console.log(novoUsuario);
-
     const formData = new FormData();
     formData.append('user', new Blob(
         [JSON.stringify(novoUsuario)],
         { type: "application/json" }
     ));
 
-    fetch('http://localhost:8080/usuarios', {
+    fetch(`${API_BASE}/usuarios`, {
         method: 'POST',
         headers: { 'Accept': 'application/json' },
         body: formData
@@ -103,7 +103,7 @@ document.querySelector('form').addEventListener('submit', function (e) {
             if (!res.ok) {
                 if (res.status === 400 && data.message) {
                     if (data.message.includes('CPF')) {
-                        alert('Este CPF já está cadastrado.');
+                        alert('CPF Invalido.');
                         document.getElementById('cpf-cnpj').classList.add('input-error');
                         document.querySelector('label[for="cpf-cnpj"]').classList.add('label-error');
                         return;
@@ -122,7 +122,6 @@ document.querySelector('form').addEventListener('submit', function (e) {
 
             alert('Usuário cadastrado com sucesso!');
             window.location.replace('../pages/login.html');
-            console.log(data);
         })
         .catch(err => {
             alert(err.message || 'Erro no cadastro de usuário.');

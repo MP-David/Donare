@@ -4,6 +4,7 @@ import com.utfpr.donare.domain.Campanha;
 import com.utfpr.donare.domain.Comentario;
 import com.utfpr.donare.domain.EmailType;
 import com.utfpr.donare.domain.User;
+import com.utfpr.donare.dto.ComentarioDeleteRequestDTO;
 import com.utfpr.donare.dto.ComentarioRequestDTO;
 import com.utfpr.donare.dto.ComentarioResponseDTO;
 import com.utfpr.donare.dto.EmailRequestDTO;
@@ -38,11 +39,7 @@ public class ComentarioService {
                 .orElseThrow(() -> new ResourceNotFoundException("Campanha não encontrada com o id: " + idCampanha));
 
         User user = userService.findByEmail(comentarioRequestDTO.getUserEmail());
-
-        Comentario comentario = new Comentario();
-        comentario.setConteudo(comentarioRequestDTO.getConteudo());
-        comentario.setCampanha(campanha);
-        comentario.setUser(user);
+        Comentario comentario = new Comentario(comentarioRequestDTO, campanha, user);
 
         EmailType emailType = null;
         String emailUser = null;
@@ -75,27 +72,23 @@ public class ComentarioService {
         return converterParaResponseDTO(comentarioSalvo);
     }
 
-    public List<ComentarioResponseDTO> listarComentariosPorCampanha(Long idCampanha) {
-        
+    public List<ComentarioResponseDTO> listCommentsByCampaign(Long idCampanha) {
         if (!campanhaRepository.existsById(idCampanha)) {
-        
             throw new ResourceNotFoundException("Campanha não encontrada com o id: " + idCampanha);
         }
         
         List<Comentario> comentarios = comentarioRepository.findByCampanhaIdOrderByDataCriacaoDesc(idCampanha);
-        
         return comentarios.stream().map(this::converterParaResponseDTO).collect(Collectors.toList());
     }
 
-    private Comentario findComentarioById(Long idComentario) {
-
-        return comentarioRepository.findById(idComentario).orElseThrow(() -> new ResourceNotFoundException("Comentario não encontado"));
+    private Comentario findComentarioById(Long id) {
+        return comentarioRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Comentario não encontrado com o id: " + id));
     }
 
 
-    public ComentarioResponseDTO buscarComentarioPorId(Long idCampanha, Long idComentario) {
-        Comentario comentario = comentarioRepository.findById(idComentario)
-                .orElseThrow(() -> new ResourceNotFoundException("Comentario não encontrado com o id: " + idComentario));
+    public ComentarioResponseDTO findComentarioPorId(Long idCampanha, Long idComentario) {
+        Comentario comentario = findComentarioById(idComentario);
 
         if (!comentario.getCampanha().getId().equals(idCampanha)) {
             throw new ResourceNotFoundException("Comentario com id " + idComentario + " não pertence à campanha com id " + idCampanha);
@@ -105,8 +98,7 @@ public class ComentarioService {
 
     @Transactional
     public ComentarioResponseDTO updateComentario(Long idComentario,ComentarioRequestDTO comentarioRequestDTO) {
-        Comentario comentario = comentarioRepository.findById(idComentario)
-                .orElseThrow(() -> new ResourceNotFoundException("Comentario não encontrada com o id: " + idComentario));
+        Comentario comentario = findComentarioById(idComentario);
 
         User user = userService.findByEmail(comentarioRequestDTO.getUserEmail());
 
@@ -123,18 +115,15 @@ public class ComentarioService {
     }
 
     @Transactional
-    public void deleteComentario(Long idComentario, ComentarioRequestDTO comentarioRequestDTO) {
-        Comentario comentario = comentarioRepository.findById(idComentario)
-                .orElseThrow(() -> new ResourceNotFoundException("Comentário não encontrado com o id: " + idComentario));
+    public void deleteComentario(Long idComentario, ComentarioDeleteRequestDTO comentarioDeleteRequestDTO) {
+        Comentario comentario = findComentarioById(idComentario);
 
-        if(comentario.getUser().getEmail().equals(comentarioRequestDTO.getUserEmail())){
+        if(comentario.getUser().getEmail().equals(comentarioDeleteRequestDTO.getUserEmail())){
             comentarioRepository.delete(comentario);
         }
-        else{
-            throw new ResourceNotFoundException("Usuário com e-mail inválido para excluir esse comentário" + comentarioRequestDTO.getUserEmail());
+        else {
+            throw new ResourceNotFoundException("Usuário com e-mail inválido para excluir esse comentário " + comentarioDeleteRequestDTO.getUserEmail());
         }
-
-
     }
 
     private ComentarioResponseDTO converterParaResponseDTO(Comentario comentario) {

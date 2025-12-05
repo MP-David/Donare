@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Optional;
 
 //cors
    import org.springframework.context.annotation.Bean;
@@ -51,7 +52,7 @@ public class UserController {
             @Valid @RequestPart("user") UserRequestDTO userRequestDTO,
             @RequestPart(value = "midia", required = false) MultipartFile midia) {
 
-        return new ResponseEntity<>(userService.save(userRequestDTO, midia), HttpStatus.CREATED);
+        return new ResponseEntity<>(userService.saveUsuario(userRequestDTO, midia), HttpStatus.CREATED);
     }
 
 
@@ -112,7 +113,7 @@ public class UserController {
             @Valid @RequestPart("user") UserRequestDTO userRequestDTO,
             @RequestPart(value = "midia", required = false) MultipartFile midia) {
 
-        UserResponseDTO updatedUser = userService.update(id, userRequestDTO, midia);
+        UserResponseDTO updatedUser = userService.updateUsuario(id, userRequestDTO, midia);
 
         return new ResponseEntity<>(updatedUser, HttpStatus.OK);
     }
@@ -162,7 +163,7 @@ public class UserController {
             @Parameter(description = "ID do usuário a ser deletado.", required = true, example = "1")
             @PathVariable Long id) {
 
-        userService.delete(id);
+        userService.deleteUsuario(id);
 
         return new ResponseEntity<>(HttpStatus.NO_CONTENT);
     }
@@ -172,7 +173,7 @@ public class UserController {
             @Parameter(description = "ID do usuário a ser encontra.", required = true, example = "1")
             @PathVariable Long id) {
 
-        return new ResponseEntity<>(userService.findById(id), HttpStatus.OK);
+        return new ResponseEntity<>(userService.findUsuarioById(id), HttpStatus.OK);
     }
 
     @GetMapping(path = "email/{email}")
@@ -236,5 +237,22 @@ public class UserController {
 
         List<CampanhaResponseDTO> campanhas = userService.findCampanhasSeguidasByUsuario(idUsuario);
         return new ResponseEntity<>(campanhas, HttpStatus.OK);
+    }
+
+    @Operation(summary = "Autenticar usuário pelo id do google.", description = "Autenticar usuário pelo googleId")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Autenticação bem-sucedida, token JWT retornado.",
+                    content = @Content(mediaType = MediaType.TEXT_PLAIN_VALUE,
+                            schema = @Schema(type = "string", example = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."))),
+            @ApiResponse(responseCode = "404", description = "Usuário não encontrado.",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class))),
+            @ApiResponse(responseCode = "500", description = "Erro interno do servidor.",
+                    content = @Content(mediaType = MediaType.APPLICATION_JSON_VALUE,
+                            schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    @PostMapping(path = "/authenticate/google", consumes = MediaType.APPLICATION_JSON_VALUE, produces = MediaType.TEXT_PLAIN_VALUE)
+    public String authenticateUserByGoogleEmail(@Valid @RequestBody AuthGoogleRequestDTO authGoogleRequestDTO){
+        return userService.authenticateUserByGoogleEmail(authGoogleRequestDTO);
     }
 }

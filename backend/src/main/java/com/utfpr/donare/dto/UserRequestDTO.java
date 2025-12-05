@@ -27,7 +27,6 @@ public class UserRequestDTO {
             example = "12345678900",
             requiredMode = Schema.RequiredMode.REQUIRED)
     @NotBlank(message = "CPF ou CNPJ é obrigatório.")
-    @Pattern(regexp = "\\d{11}|\\d{14}", message = "CPF deve ter 11 dígitos ou CNPJ 14 dígitos (somente números).")
     private String cpfOuCnpj;
 
     @Schema(description = "Se o usuário é pessoa física ou jurídica",
@@ -37,14 +36,17 @@ public class UserRequestDTO {
     private Integer tipoUsuario;
 
     @Schema(description = "Dados do endereço do usuário.",
-            requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotNull(message = "O endereço é obrigatório.")
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     @Valid
     private EnderecoRequestDto endereco;
 
     @Schema(description = "Senha do usuário. Deve conter pelo menos 8 caracteres, incluindo letras maiúsculas, minúsculas, números e caracteres especiais.",
             example = "Senha@123",
-            requiredMode = Schema.RequiredMode.REQUIRED)
-    @NotBlank(message = "A senha é obrigatória.")
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED)
     private String password;
+
+    @Schema(description = "Google Id do usuário, deve ser único.",
+            example = "12345678",
+            requiredMode = Schema.RequiredMode.NOT_REQUIRED)
+    private String googleId;
 }
